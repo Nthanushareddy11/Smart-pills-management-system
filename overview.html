@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Pill Dispenser - Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      min-height:100vh;padding:40px 20px;overflow-x:hidden}
+    .container{max-width:1200px;margin:0 auto}
+    .header{background:rgba(255,255,255,.95);padding:40px;border-radius:24px;margin-bottom:30px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .logo{font-size:3em}
+    h1{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:2.5em;font-weight:700}
+    .subtitle{color:#6c757d;font-size:1.1em}
+    .connection-badge{display:flex;align-items:center;gap:8px;padding:10px 20px;background:#f8f9fa;border-radius:50px}
+    .connection-status{width:12px;height:12px;border-radius:50%}
+    .connected{background:#28a745;box-shadow:0 0 0 4px rgba(40,167,69,.2);animation:pulse-green 2s infinite}
+    .disconnected{background:#dc3545}
+    @keyframes pulse-green{0%,100%{box-shadow:0 0 0 4px rgba(40,167,69,.2)}50%{box-shadow:0 0 0 8px rgba(40,167,69,0)}}
+    .status-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+    .status-card{background:#f8f9fa;padding:20px;border-radius:16px;display:flex;align-items:center;gap:15px}
+    .status-icon{font-size:2em}
+    .status-value{font-weight:700}
+    .status.ok{color:#28a745}
+    .status.alert{color:#dc3545;animation:pulse-text 1s infinite}
+    @keyframes pulse-text{0%,100%{opacity:1}50%{opacity:.6}}
+    .alert-box{background:rgba(255,255,255,.95);padding:30px;border-radius:20px;margin-bottom:30px;border:2px solid #dc3545;display:none}
+    .alert-box.show{display:block}
+    .alert-title{color:#dc3545;font-size:1.8em;font-weight:700;margin-bottom:15px}
+    .alert-message{color:#495057;font-size:1.1em;background:#fff3cd;border-left:4px solid #ffc107;padding:15px;border-radius:10px;white-space:pre-line}
+    .history{background:rgba(255,255,255,.95);padding:30px;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .history-item{padding:15px;background:#f8f9fa;border-radius:10px;margin-bottom:10px;border-left:4px solid #667eea}
+    .timestamp{color:#6c757d;font-size:.85em;margin-top:5px}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <div class="logo">💊</div>
+        <h1>Smart Pill Dispenser</h1>
+        <p class="subtitle">Real-time medication monitoring system</p>
+      </div>
+      <div class="connection-badge">
+        <span id="connectionStatus" class="connection-status disconnected"></span>
+        <span id="connectionText">Connecting...</span>
+      </div>
+    </div>
+
+    <div class="status-cards">
+      <div class="status-card">
+        <div class="status-icon">🏥</div>
+        <div><h3>System Status</h3><div id="statusBadge" class="status-value status ok">System OK</div></div>
+      </div>
+      <div class="status-card">
+        <div class="status-icon">📊</div>
+        <div><h3>Total Alerts</h3><div id="alertCount" class="status-value">0</div></div>
+      </div>
+      <div class="status-card">
+        <div class="status-icon">⏰</div>
+        <div><h3>Last Check</h3><div id="lastCheck" class="status-value">--:--</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert-box" id="alertBox">
+    <div class="alert-title">⚠️ Wrong/Unknown Pill Detected!</div>
+    <div class="alert-message" id="alertMessage">Loading...</div>
+  </div>
+
+  <div class="history">
+    <h2>📋 Alert History</h2>
+    <div id="historyList">
+      <div class="history-item no-alerts">
+        <div>✅ No alerts yet... System is monitoring.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+  import { getDatabase, ref, onValue, onChildAdded, limitToLast, query } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js';
+
+  // Your Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyAbINBBPuAkGvsWmjJbgoANvugVAhA319U",
+    authDomain: "smart-pill-594a6.firebaseapp.com",
+    databaseURL: "https://smart-pill-594a6-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "smart-pill-594a6",
+    storageBucket: "smart-pill-594a6.firebasestorage.app",
+    messagingSenderId: "331949477437",
+    appId: "1:331949477437:web:1f3235c71e703bd213a454"
+  };
+
+  // Init
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  // UI refs
+  const connectionStatus = document.getElementById('connectionStatus');
+  const connectionText   = document.getElementById('connectionText');
+  const statusBadge      = document.getElementById('statusBadge');
+  const alertBox         = document.getElementById('alertBox');
+  const alertMessage     = document.getElementById('alertMessage');
+  const alertCountEl     = document.getElementById('alertCount');
+  const historyList      = document.getElementById('historyList');
+  const lastCheck        = document.getElementById('lastCheck');
+
+  // Clock
+  function updateClock(){
+    lastCheck.textContent = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+  }
+  updateClock(); setInterval(updateClock, 60000);
+
+  // Connection indicator
+  onValue(ref(db, '.info/connected'), s => {
+    const ok = !!s.val();
+    connectionStatus.className = 'connection-status ' + (ok ? 'connected' : 'disconnected');
+    connectionText.textContent = ok ? 'Connected' : 'Disconnected';
+  });
+
+  // Beep helper (may require user interaction in some browsers)
+  function beep(){
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      for(let i=0;i<3;i++){
+        setTimeout(()=>{
+          const osc=ctx.createOscillator(), gain=ctx.createGain();
+          osc.type='sine'; osc.frequency.value=800;
+          osc.connect(gain); gain.connect(ctx.destination);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime+0.3);
+          osc.start(); osc.stop(ctx.currentTime+0.3);
+        }, i*400);
+      }
+    }catch(e){}
+  }
+
+  function showAlert(msg){
+    alertMessage.textContent = msg;
+    alertBox.classList.add('show');
+    statusBadge.textContent = 'ALERT!';
+    statusBadge.className = 'status-value status alert';
+    beep();
+  }
+
+  function addHistory(msg, time){
+    if (historyList.querySelector('.no-alerts')) historyList.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.innerHTML = `<div>${msg}</div><div class="timestamp">${time}</div>`;
+    historyList.prepend(div);
+    // update counter
+    alertCountEl.textContent = historyList.querySelectorAll('.history-item').length;
+  }
+
+  // --- LIVE from SmartPill/Logs (sent every read) ---
+  const logsRef = query(ref(db, 'SmartPill/Logs'), limitToLast(100));
+  onChildAdded(logsRef, snap => {
+    const d = snap.val() || {};
+    updateClock();
+    const color  = (d.detectedColor || 'UNKNOWN').toUpperCase();
+    const status = (d.status || 'UNKNOWN').toUpperCase();
+    // Treat WRONG or UNKNOWN as alert
+    if (status !== 'CORRECT' || color === 'UNKNOWN'){
+      const msg = `Wrong/Unknown Pill!\nTime: ${d.timestamp || new Date().toISOString()}\nPeriod: ${d.period || '-'}\nDetected: ${color}\nR:${d.Ri ?? '-'} G:${d.Gi ?? '-'} B:${d.Bi ?? '-'}`;
+      showAlert(msg);
+      addHistory(msg, d.timestamp || new Date().toLocaleString());
+    } else {
+      statusBadge.textContent = 'System OK';
+      statusBadge.className = 'status-value status ok';
+    }
+  });
+
+  // --- Also listen to alerts/latest (string) ---
+  onValue(ref(db, 'alerts/latest'), snap => {
+    const msg = snap.val();
+    if (msg){
+      showAlert(msg);
+      addHistory(msg, new Date().toLocaleString());
+    }
+  });
+
+  // --- Keep counter synced with alerts/history if present ---
+  onValue(ref(db, 'alerts/history'), snap => {
+    const val = snap.val();
+    if (!val) return;
+    // If page loaded late, render last 20 alerts
+    historyList.innerHTML = '';
+    const items = Object.entries(val)
+      .map(([k,v]) => ({...v, key:k}))
+      .sort((a,b)=> (a.timestamp||'').localeCompare(b.timestamp||''))
+      .slice(-20);
+    for (const it of items){
+      addHistory(it.message || '(no message)', it.timestamp || new Date().toLocaleString());
+    }
+  });
+</script>
+</body>
+</html>
